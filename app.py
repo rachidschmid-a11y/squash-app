@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-from datetime import datetime
 
 
 # ==========================
@@ -18,152 +17,368 @@ supabase = create_client(URL, KEY)
 # Einstellungen
 # ==========================
 
-SPIELER = ["Marlon", "Vossi", "Paul", "Jonas"]
+SPIELER = [
+    "Marlon",
+    "Vossi",
+    "Paul",
+    "Jonas"
+]
 
 PLATZPREIS = 19
 FAKTOR = 200 / 250
 
 
 # ==========================
-# Karte holen (SAFE)
+# Hilfsfunktionen
 # ==========================
 
+
+def db_error(e):
+    st.error("Datenbank Fehler:")
+    st.write(e)
+
+
+
 def get_karte():
-    result = (
-        supabase
-        .table("karte")
-        .select("*")
-        .eq("aktiv", True)
-        .execute()
-    )
 
-    data = result.data
+    try:
 
-    if not data:
+        result = (
+            supabase
+            .table("karte")
+            .select("*")
+            .eq("aktiv", True)
+            .execute()
+        )
+
+        if not result.data:
+            return None
+
+        return result.data[0]
+
+    except Exception as e:
+        db_error(e)
         return None
 
-    return data[0]
+
+
+def get_spiele():
+
+    try:
+
+        result = (
+            supabase
+            .table("spiele")
+            .select("*")
+            .execute()
+        )
+
+        return result.data or []
+
+    except Exception as e:
+
+        db_error(e)
+
+        return []
+
 
 
 # ==========================
 # Spiel speichern
 # ==========================
 
+
 def speichern(spieler, einheiten):
 
-    kosten = einheiten * PLATZPREIS * FAKTOR
-    pro_person = kosten / len(spieler)
 
-    for person in spieler:
-        supabase.table("spiele").insert({
-            "spieler": person,
-            "einheiten": einheiten,
-            "kosten": pro_person
-        }).execute()
-
-    # Karte holen (SAFE)
     karte = get_karte()
 
+
     if karte is None:
-        st.error("Keine aktive Karte vorhanden")
+
+        st.error(
+            "Keine aktive Karte vorhanden"
+        )
+
         return
 
-    neues_guthaben = karte["guthaben"] - kosten
 
-    supabase.table("karte").update({
-        "guthaben": max(neues_guthaben, 0)
-    }).eq("id", karte["id"]).execute()
+
+    gesamtkosten = (
+        einheiten *
+        PLATZPREIS *
+        FAKTOR
+    )
+
+
+    kosten_pro_person = (
+        gesamtkosten /
+        len(spieler)
+    )
+
+
+
+    for person in spieler:
+
+
+        supabase.table(
+            "spiele"
+        ).insert({
+
+            "spieler": person,
+
+            "einheiten": einheiten,
+
+            "kosten": kosten_pro_person
+
+        }).execute()
+
+
+
+    neues_guthaben = (
+        karte["guthaben"]
+        -
+        gesamtkosten
+    )
+
+
+    supabase.table(
+        "karte"
+    ).update({
+
+        "guthaben": max(neues_guthaben,0)
+
+    }).eq(
+
+        "id",
+        karte["id"]
+
+    ).execute()
+
+
 
     if neues_guthaben <= 0:
+
         abrechnung()
+
 
 
 # ==========================
 # Abrechnung
 # ==========================
 
+
 def abrechnung():
 
-    daten = supabase.table("spiele").select("*").execute().data or []
+
+    daten = get_spiele()
+
 
     if not daten:
+
         return
+
+
 
     df = pd.DataFrame(daten)
 
-    gruppiert = df.groupby("spieler")["kosten"].sum()
 
-    for name, betrag in gruppiert.items():
-        supabase.table("abrechnung").insert({
+
+    summen = (
+        df
+        .groupby("spieler")
+        ["kosten"]
+        .sum()
+    )
+
+
+
+    for name,betrag in summen.items():
+
+
+        supabase.table(
+            "abrechnung"
+        ).insert({
+
             "spieler": name,
+
             "betrag": float(betrag)
+
         }).execute()
 
-    supabase.table("karte").update({
+
+
+    supabase.table(
+        "karte"
+    ).update({
+
         "aktiv": False
-    }).eq("aktiv", True).execute()
+
+    }).eq(
+
+        "aktiv",
+        True
+
+    ).execute()
+
 
 
 # ==========================
-# UI
+# Oberfläche
 # ==========================
 
-st.title("🏸 Squash Abrechnung")
 
-st.subheader("Spieler auswählen")
-
-auswahl = []
-
-for p in SPIELER:
-    if st.checkbox(p):
-        auswahl.append(p)
-
-
-einheiten = st.number_input(
-    "Einheiten (45 Minuten)",
-    min_value=1,
-    max_value=20,
-    value=1
+st.title(
+    "🏸 Squash Abrechnung"
 )
 
 
-if st.button("Spiel speichern"):
-    if len(auswahl) == 0:
-        st.warning("Bitte Spieler auswählen")
+st.subheader(
+    "Spieler auswählen"
+)
+
+
+
+auswahl = []
+
+
+for spieler in SPIELER:
+
+
+    if st.checkbox(spieler):
+
+        auswahl.append(spieler)
+
+
+
+einheiten = st.number_input(
+
+    "Einheiten (45 Minuten)",
+
+    min_value=1,
+
+    max_value=20,
+
+    value=1
+
+)
+
+
+
+if st.button(
+    "Spiel speichern"
+):
+
+
+    if not auswahl:
+
+        st.warning(
+            "Bitte mindestens einen Spieler auswählen"
+        )
+
+
     else:
-        speichern(auswahl, einheiten)
-        st.success("Gespeichert")
+
+        speichern(
+            auswahl,
+            einheiten
+        )
+
+        st.success(
+            "Spiel gespeichert"
+        )
+
 
 
 # ==========================
-# Anzeige
+# Aktueller Stand
 # ==========================
+
 
 st.divider()
-st.subheader("Aktueller Stand")
 
-spiele = supabase.table("spiele").select("*").execute().data or []
 
-df = pd.DataFrame(spiele)
+st.subheader(
+    "Aktueller Stand"
+)
 
-if not df.empty:
-    st.dataframe(df)
+
+
+spiele = get_spiele()
+
+
+
+if spiele:
+
+
+    df = pd.DataFrame(spiele)
+
+
+    st.dataframe(
+        df,
+        use_container_width=True
+    )
+
+
 else:
-    st.info("Noch keine Spiele vorhanden")
+
+    st.info(
+        "Noch keine Spiele vorhanden"
+    )
+
+
+
+# ==========================
+# Karte anzeigen
+# ==========================
 
 
 karte = get_karte()
 
+
+
 if karte:
-    st.metric("Kartenguthaben", f"{karte['guthaben']:.2f} €")
+
+
+    st.metric(
+
+        "Kartenguthaben",
+
+        f"{karte['guthaben']:.2f} €"
+
+    )
+
+
 else:
-    st.error("Keine aktive Karte vorhanden")
+
+    st.warning(
+        "Keine aktive Karte"
+    )
 
 
-if st.button("Neue Karte starten"):
-    supabase.table("karte").insert({
-        "guthaben": 250,
-        "aktiv": True
+
+# ==========================
+# Neue Karte
+# ==========================
+
+
+if st.button(
+    "Neue Karte starten"
+):
+
+
+    supabase.table(
+        "karte"
+    ).insert({
+
+        "guthaben":250,
+
+        "aktiv":True
+
     }).execute()
 
-    st.success("Neue Karte gestartet")
+
+
+    st.success(
+        "Neue Karte gestartet"
+    )
