@@ -1,4 +1,4 @@
-# Version 3.o
+# Version 4.0
 
 import streamlit as st
 import pandas as pd
@@ -12,7 +12,10 @@ from supabase import create_client
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
-supabase = create_client(URL, KEY)
+supabase = create_client(
+    URL,
+    KEY
+)
 
 
 # ==========================
@@ -31,15 +34,19 @@ FAKTOR = 200 / 250
 
 
 # ==========================
-# Hilfsfunktionen
+# Fehleranzeige
 # ==========================
 
-
 def db_error(e):
+
     st.error("Datenbank Fehler:")
     st.write(e)
 
 
+
+# ==========================
+# Aktive Karte holen
+# ==========================
 
 def get_karte():
 
@@ -47,22 +54,32 @@ def get_karte():
 
         result = (
             supabase
-            .table("karte")
+            .table("public.karte")
             .select("*")
             .eq("aktiv", True)
             .execute()
         )
 
+
         if not result.data:
+
             return None
+
 
         return result.data[0]
 
+
     except Exception as e:
+
         db_error(e)
+
         return None
 
 
+
+# ==========================
+# Spiele laden
+# ==========================
 
 def get_spiele():
 
@@ -70,12 +87,14 @@ def get_spiele():
 
         result = (
             supabase
-            .table("spiele")
+            .table("public.spiele")
             .select("*")
             .execute()
         )
 
+
         return result.data or []
+
 
     except Exception as e:
 
@@ -88,7 +107,6 @@ def get_spiele():
 # ==========================
 # Spiel speichern
 # ==========================
-
 
 def speichern(spieler, einheiten):
 
@@ -124,7 +142,7 @@ def speichern(spieler, einheiten):
 
 
         supabase.table(
-            "spiele"
+            "public.spiele"
         ).insert({
 
             "spieler": person,
@@ -144,11 +162,12 @@ def speichern(spieler, einheiten):
     )
 
 
+
     supabase.table(
-        "karte"
+        "public.karte"
     ).update({
 
-        "guthaben": max(neues_guthaben,0)
+        "guthaben": max(neues_guthaben, 0)
 
     }).eq(
 
@@ -166,9 +185,8 @@ def speichern(spieler, einheiten):
 
 
 # ==========================
-# Abrechnung
+# Abrechnung erstellen
 # ==========================
-
 
 def abrechnung():
 
@@ -195,11 +213,11 @@ def abrechnung():
 
 
 
-    for name,betrag in summen.items():
+    for name, betrag in summen.items():
 
 
         supabase.table(
-            "abrechnung"
+            "public.abrechnung"
         ).insert({
 
             "spieler": name,
@@ -211,7 +229,7 @@ def abrechnung():
 
 
     supabase.table(
-        "karte"
+        "public.karte"
     ).update({
 
         "aktiv": False
@@ -228,7 +246,6 @@ def abrechnung():
 # ==========================
 # Oberfläche
 # ==========================
-
 
 st.title(
     "🏸 Squash Abrechnung"
@@ -272,7 +289,8 @@ if st.button(
 ):
 
 
-    if not auswahl:
+    if len(auswahl) == 0:
+
 
         st.warning(
             "Bitte mindestens einen Spieler auswählen"
@@ -281,10 +299,12 @@ if st.button(
 
     else:
 
+
         speichern(
             auswahl,
             einheiten
         )
+
 
         st.success(
             "Spiel gespeichert"
@@ -293,9 +313,8 @@ if st.button(
 
 
 # ==========================
-# Aktueller Stand
+# Anzeige
 # ==========================
-
 
 st.divider()
 
@@ -324,6 +343,7 @@ if spiele:
 
 else:
 
+
     st.info(
         "Noch keine Spiele vorhanden"
     )
@@ -331,9 +351,8 @@ else:
 
 
 # ==========================
-# Karte anzeigen
+# Kartenguthaben
 # ==========================
-
 
 karte = get_karte()
 
@@ -353,8 +372,9 @@ if karte:
 
 else:
 
+
     st.warning(
-        "Keine aktive Karte"
+        "Keine aktive Karte vorhanden"
     )
 
 
@@ -363,19 +383,18 @@ else:
 # Neue Karte
 # ==========================
 
-
 if st.button(
     "Neue Karte starten"
 ):
 
 
     supabase.table(
-        "karte"
+        "public.karte"
     ).insert({
 
-        "guthaben":250,
+        "guthaben": 250,
 
-        "aktiv":True
+        "aktiv": True
 
     }).execute()
 
